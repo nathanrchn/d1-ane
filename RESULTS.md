@@ -1,6 +1,6 @@
 # Measured results: d1-omni-600M on the Apple Neural Engine
 
-Apple M4 Max (Mac16,6), macOS 27.2 (26B5091g), Python 3.12.12, coreai-core 1.0.0b2. Measured 2026-10-10 on a machine that was not idle; one engine at a time, medians of warm runs. Not a controlled benchmark. The comparisons are the same packages on the GPU (Core AI) and the checkpoint in PyTorch on the GPU (MPS); PyTorch MPS FP32 is the numerical reference. The CPU is not benchmarked.
+Apple M4 Max (Mac16,6), macOS 27.2 (26B5091g), Python 3.12.12, coreai-core 1.0.0b2. Measured 2026-10-10 (sections added later give their own date) on a machine that was not idle; one engine at a time, medians of warm runs. Not a controlled benchmark. The comparisons are the same packages on the GPU (Core AI) and the checkpoint in PyTorch on the GPU (MPS); PyTorch MPS FP32 is the numerical reference. The CPU is not benchmarked.
 
 ## Build
 
@@ -197,7 +197,7 @@ Without the filter:
 | d1-omni-600M, int8 | plain (the original demo) | clean placement? | 60.0 | 11.0 | 0/10 | 37% | 4.21 ms | 14,638 |
 
 
-Speed, measured in turns: each model plays 150 pieces of a seed alone with the filter on, then the next model plays the same seed, for 6 seeds (load average 4.6). A decision is one landing rated: tokenizer, host arrays, the model call and the readout.
+Speed, measured in turns on 2026-10-13: each model plays 150 pieces of a seed alone with the filter on, then the next model plays the same seed, for 6 seeds (load average 4.6). A decision is one landing rated: tokenizer, host arrays, the model call and the readout.
 
 | Model | Decisions | Median | Mean | p95 | Decisions/min |
 | --- | ---: | ---: | ---: | ---: | ---: |

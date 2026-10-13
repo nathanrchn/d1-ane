@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import logging
 import sys
+import warnings
 from pathlib import Path
 
 from . import BUILD, LAYA, MODEL
@@ -58,8 +60,16 @@ def run(step: str, argv: list[str]):
     return importlib.import_module(f"d1ane.{STEPS[step]}").main(argv)
 
 
+def quiet():
+    """The converters' dependencies warn at import and on every export; none of it concerns the user of a command."""
+    warnings.filterwarnings("ignore")
+    for name in ("torch.distributed.elastic.multiprocessing.redirects", "coremltools"):
+        logging.getLogger(name).setLevel(logging.ERROR)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    quiet()
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 0

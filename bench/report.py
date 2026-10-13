@@ -267,7 +267,8 @@ def main(argv=None):
     m = next(iter(res["latency"].values()))["machine"]
     print("# Measured results: d1-omni-600M on the Apple Neural Engine\n")
     print(f"{m['chip']} ({m['model']}), macOS {m['macos']} ({m['build']}), Python {m['python']}, coreai-core 1.0.0b2. "
-          f"Measured {m['time'][:10]} on a machine that was not idle; one engine at a time, medians of warm runs. "
+          f"Measured {m['time'][:10]} (sections added later give their own date) on a machine that was not idle; one engine at "
+          "a time, medians of warm runs. "
           "Not a controlled benchmark. The comparisons are the same packages on the GPU (Core AI) and the checkpoint in "
           "PyTorch on the GPU (MPS); PyTorch MPS FP32 is the numerical reference. The CPU is not benchmarked.\n")
     print("## Build\n\nThe FP16 reference build (`d1ane setup --quant fp16`). The default build (`d1ane setup`) is the same "
@@ -335,7 +336,7 @@ def main(argv=None):
               "\n\n" + tetris_section(a.results))
         if (a.results / "tetris_speed.json").is_file():
             sp = json.loads((a.results / "tetris_speed.json").read_text())
-            print(f"Speed, measured in turns: each model plays {sp['pieces']} pieces of a seed alone with the filter on, "
+            print(f"Speed, measured in turns on {sp['time'][:10]}: each model plays {sp['pieces']} pieces of a seed alone with the filter on, "
                   f"then the next model plays the same seed, for {sp['rounds']} seeds (load average {sp['load_avg'][0]}). "
                   "A decision is one landing rated: tokenizer, host arrays, the model call and the readout.\n\n"
                   + speed_section(sp))
