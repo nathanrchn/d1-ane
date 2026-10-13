@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>d1 plays Tetris</title>
+<style>
+  :root { --bg:#f6f5f1; --card:#fff; --ink:#1c1b19; --mute:#6f6b63; --line:#e3e0d8; --accent:#3d5afe; --well:#101014;
+          --grid:#1d1d24; --good:#1a8f4c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141413; --card:#1e1d1b; --ink:#eceae4; --mute:#99958b; --line:#33312d; --accent:#8c9eff; --good:#5fd08a; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width:1240px; margin:0 auto; padding:18px 16px 24px; }
+  h1 { font-size:22px; margin:0 0 2px; } .sub { color:var(--mute); margin:0 0 12px; max-width:1000px; }
+  .bar { display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-bottom:16px; }
+  .bar label { display:block; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--mute); margin-bottom:3px; }
+  select, input[type=number] { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px;
+    padding:7px 9px; font:inherit; } input[type=number] { width:84px; }
+  button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px;
+    padding:7px 14px; cursor:pointer; } button.go { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .check { display:flex; gap:6px; align-items:center; padding-bottom:8px; font-size:14px; }
+  .layout { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .player { width:330px; } .player h2 { font-size:16px; margin:0; } .player .info { color:var(--mute); font-size:12px; min-height:36px; margin:2px 0 8px; }
+  canvas { display:block; background:var(--well); border-radius:8px; width:226px; height:452px; margin:0 auto; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:10px; }
+  .stat { background:var(--bg); border-radius:8px; padding:6px 7px; } .stat b { display:block; font-size:16px; font-variant-numeric:tabular-nums; }
+  .stat span { font-size:10.5px; color:var(--mute); line-height:1.2; display:block; }
+  .state { font-size:12px; color:var(--mute); margin-top:8px; min-height:18px; } .state.win { color:var(--good); font-weight:600; }
+  .log { flex:1; min-width:300px; } .log h2 { font-size:16px; margin:0 0 2px; } .log .q { color:var(--mute); font-size:13px; margin:0 0 10px; }
+  .entry { border-top:1px solid var(--line); padding:8px 0; font-size:13px; } .entry:first-child { border-top:0; }
+  .entry .head { color:var(--mute); font-variant-numeric:tabular-nums; margin-bottom:3px; }
+  .cand { display:grid; grid-template-columns:54px 1fr; gap:8px; padding:1px 0; color:var(--mute); }
+  .cand b { font-variant-numeric:tabular-nums; text-align:right; font-weight:500; } .cand.pick { color:var(--ink); } .cand.pick b { color:var(--accent); font-weight:700; }
+  .note { color:var(--mute); font-size:12px; margin-top:16px; max-width:820px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>d1 plays Tetris</h1>
+  <p class="sub">Every legal landing of the piece is described in one sentence. The model never sees the board: it rates
+    each sentence, one Neural Engine call per landing, and the best-rated landing is played. Nothing is generated and
+    nothing leaves this Mac.</p>
+  <div class="bar">
+    <div><label for="a">Left</label><select id="a"></select></div>
+    <div><label for="b">Right</label><select id="b"></select></div>
+    <div><label for="seed">Seed</label><input id="seed" type="number" value="7" min="0"></div>
+    <div><label for="pace">Pace</label><select id="pace"><option value="0">as fast as the model</option><option value="60">watchable</option><option value="400">slow, readable</option></select></div>
+    <div class="check"><input id="filter" type="checkbox" checked><label for="filter" style="margin:0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)">never bury a cell if avoidable</label></div>
+    <button class="go" id="go">Start</button>
+  </div>
+  <div class="layout">
+    <div class="card player" id="pa"></div>
+    <div class="card player" id="pb"></div>
+    <div class="card log"><h2>What the left model just decided</h2><p class="q">Its three best-rated landings for each piece.</p><div id="log"></div></div>
+  </div>
+  <p class="note" id="note"></p>
+</main>
+<script>
+const W = 10, H = 20, C = 22, COLORS = {I:"#39c5d8", O:"#e8c53a", T:"#a66bd6", S:"#57c46a", Z:"#e2574c", J:"#4f7be0", L:"#e8913a"};
+const $ = id => document.getElementById(id), fmt = (v, d = 0) => v.toLocaleString("en-US", {maximumFractionDigits: d, minimumFractionDigits: d});
+let info = {}, running = false, panels = [];
+
+class Panel {
+  constructor(root, log) {
+    this.root = root; this.log = log; this.src = null;
+    root.innerHTML = `<h2></h2><div class="info"></div><canvas width="${W * C + 6}" height="${H * C + 12}"></canvas>
+      <div class="stats"><div class="stat"><b data-k="ms">–</b><span>ms per decision</span></div>
+      <div class="stat"><b data-k="rate">–</b><span>decisions a minute</span></div>
+      <div class="stat"><b data-k="pieces">0</b><span>pieces placed</span></div>
+      <div class="stat"><b data-k="lines">0</b><span>lines cleared</span></div></div><div class="state"></div>`;
+    this.ctx = root.querySelector("canvas").getContext("2d");
+    this.reset();
+  }
+  reset() { this.grid = Array.from({length: H}, () => Array(W).fill(null)); this.last = []; this.ev = null; this.recent = []; this.over = null; this.dirty = true; }
+  set(k, v) { this.root.querySelector(`[data-k=${k}]`).textContent = v; }
+  start(player, q) {
+    this.stop(); this.reset(); this.player = player; this.entries = [];
+    this.root.querySelector("h2").textContent = player === "none" ? "" : player;
+    this.root.querySelector(".info").textContent = info[player] || "";
+    this.root.querySelector(".state").className = "state"; this.root.querySelector(".state").textContent = "";
+    this.root.style.visibility = player === "none" ? "hidden" : "visible";
+    if (player === "none") return;
+    this.src = new EventSource(`/stream?player=${player}&${q}`);
+    this.src.onmessage = m => this.on(JSON.parse(m.data));
+    this.src.onerror = () => this.stop();
+  }
+  stop() { if (this.src) { this.src.close(); this.src = null; } }
+  on(ev) {
+    if (ev.type === "over") { this.over = ev; this.stop(); done(); return; }
+    if (ev.type !== "piece") return;
+    for (const [x, y] of ev.cells) this.grid[y][x] = ev.piece;
+    this.last = ev.cells.map(([x, y]) => [x, y]);
+    if (ev.cleared) {                                        // drop the full rows; the outline follows its cells
+      const full = new Set(this.grid.map((r, y) => r.every(Boolean) ? y : -1).filter(y => y >= 0));
+      this.grid = this.grid.filter((_, y) => !full.has(y));
+      while (this.grid.length < H) this.grid.unshift(Array(W).fill(null));
+      this.last = this.last.filter(([, y]) => !full.has(y)).map(([x, y]) => [x, y + [...full].filter(f => f > y).length]);
+    }
+    this.ev = ev; this.dirty = true;
+    if (ev.top && this.log) { this.entries.unshift(ev); this.entries.length = Math.min(this.entries.length, 5); }
+  }
+  draw() {
+    if (!this.dirty) return; this.dirty = false;
+    const c = this.ctx, ev = this.ev;
+    c.clearRect(0, 0, c.canvas.width, c.canvas.height);
+    c.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--grid");
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = this.grid[y][x], px = 3 + x * C, py = 6 + y * C;
+      if (p) { c.fillStyle = COLORS[p]; c.beginPath(); c.roundRect(px + 1, py + 1, C - 2, C - 2, 4); c.fill(); }
+      else c.strokeRect(px + .5, py + .5, C - 1, C - 1);
+    }
+    c.strokeStyle = "#fff"; c.lineWidth = 2;
+    for (const [x, y] of this.last) { c.beginPath(); c.roundRect(4 + x * C, 7 + y * C, C - 2, C - 2, 4); c.stroke(); }
+    c.lineWidth = 1;
+    if (!ev) return;
+    this.set("pieces", fmt(ev.pieces)); this.set("lines", fmt(ev.lines));
+    if (ev.landings) { this.set("ms", fmt(ev.model_ms / ev.landings, 2)); this.set("rate", fmt(6e4 * ev.landings / ev.model_ms)); }
+    const s = this.root.querySelector(".state");
+    if (this.over) s.textContent = this.over.topped_out ? `Topped out after ${fmt(this.over.pieces)} pieces.` : `Stopped at ${fmt(this.over.pieces)} pieces.`;
+    else if (ev.calls) s.textContent = `${ev.piece} piece: ${ev.offered} landings scored in ${ev.calls} call${ev.calls > 1 ? "s" : ""}, ${fmt(ev.ms, 1)} ms`;
+    if (this.log) this.log.innerHTML = this.entries.map(e => `<div class="entry"><div class="head">piece ${fmt(e.pieces)} · ${e.piece} ·
+      ${e.offered} landings · ${e.calls} call${e.calls > 1 ? "s" : ""} · ${fmt(e.ms, 1)} ms</div>` + e.top.map(([p, t, col], i) =>
+      `<div class="cand${i ? "" : " pick"}"><b>${fmt(100 * p, 1)}%</b><span>${i ? "" : "→ "}column ${col}: ${t}</span></div>`).join("") + "</div>").join("");
+  }
+}
+
+function done() {
+  if (panels.some(p => p.src)) return;
+  running = false; $("go").textContent = "Start";
+  const [a, b] = panels;
+  if (a.over && b.over && b.player !== "none" && a.over.pieces !== b.over.pieces) {
+    const w = a.over.pieces > b.over.pieces ? a : b;
+    w.root.querySelector(".state").className = "state win"; w.dirty = true;
+  }
+}
+
+function go() {
+  if (running) { panels.forEach(p => p.stop()); running = false; $("go").textContent = "Start"; return; }
+  const q = `seed=${+$("seed").value}&filter=${$("filter").checked ? 1 : 0}&pace=${$("pace").value}`;
+  running = true; $("go").textContent = "Stop";
+  panels[0].start($("a").value, q); panels[1].start($("b").value, q);
+}
+
+(async () => {
+  info = await (await fetch("/players")).json();
+  const names = Object.keys(info), model = names.find(n => n === "d1") || names[0];
+  $("a").innerHTML = names.map(n => `<option>${n}</option>`).join("");
+  $("b").innerHTML = ["none", ...names].map(n => `<option>${n}</option>`).join("");
+  $("a").value = model; $("b").value = names.includes("laya") ? "laya" : "heuristic";
+  panels = [new Panel($("pa"), $("log")), new Panel($("pb"), null)];
+  panels.forEach((p, i) => { p.player = $(i ? "b" : "a").value; p.root.querySelector("h2").textContent = p.player; p.root.querySelector(".info").textContent = info[p.player] || ""; });
+  $("note").textContent = "Both sides get the same pieces. The game harness is the one of FluidUse’s laya Tetris demo; each model reads the wording and answers the question that were tuned to it" +
+    (names.includes("laya") ? ", and laya is their published Core ML package, called from Python rather than their Swift runtime." : ".") +
+    " Model calls take turns on the Neural Engine; each side’s milliseconds and decisions a minute count only its own calls.";
+  $("go").onclick = go;
+  (function frame() { panels.forEach(p => p.draw()); requestAnimationFrame(frame); })();
+})();
+</script>
+</body>
+</html>

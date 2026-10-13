@@ -1,0 +1,37 @@
+[project]
+name = "d1-ane"
+version = "0.1.0"
+description = "LiquidAI's d1-omni-600M decision model on the Apple Neural Engine, with a Tetris demo"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+# The versions this tree was measured with (October 2026). coreai-torch 0.4.2 expects torch 2.11.
+dependencies = [
+    "coreai-core==1.0.0b2",      # coreai.runtime: load, compile, run
+    "coreai-torch==0.4.2",       # convert
+    "coreai-opt==0.2.1",         # FP16 cast, int8 weights; brings coremltools (the laya baseline)
+    "torch==2.11.0",
+    "numpy==2.3.5",
+    "safetensors",
+    "tokenizers",
+    "huggingface-hub",           # d1ane setup: the checkpoint
+    "pillow",                    # image requests
+    "soundfile",                 # audio requests
+]
+
+[project.optional-dependencies]
+# the PyTorch reference (tests/*_parity.py, bench/) and the benchmark data
+bench = ["transformers>=5.15", "torchvision==0.26.0", "datasets"]
+
+[project.scripts]
+d1ane = "d1ane.cli:main"
+
+[tool.uv]
+# coreai-opt 0.2.1 caps safetensors at 0.7.0 and transformers 5.15+ needs 0.8.0; this tree was run with 0.8.0
+override-dependencies = ["safetensors==0.8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["d1ane"]
